@@ -92,7 +92,7 @@ class Simulator(object):
             self.scheduler.__items__.remove(item)
             self.time_now = item.time
             item.event.run(self, model)
-            print 'time = %f, queue = %d, barber = %s, futeru_events_list = %s' % (self.time_now, model.queue, model.barber.state, self.scheduler.__items__)
+            print 'time = %f, queue = %d, barber = %s, future_events_list = %s' % (self.time_now, model.queue, model.barber.state, self.scheduler.__items__)
 
 
 model = Model()
