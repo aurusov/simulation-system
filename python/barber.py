@@ -1,101 +1,98 @@
-from enum import Enum
-
-class EventEnter:
-    def __init__(event, name):
-        event.name = name
-
-    def run(event, simulator, model):
-        simulator.scheduler.planning(simulator.time_now + model.get_enter_time_delay.next(), model.event_enter)
-
-        if model.barber.state == Model.Barber.State.BUSY:
-            model.queue += 1
-            return
-
-        if model.barber.state == Model.Barber.State.FREE:
-            model.barber.state = Model.Barber.State.BUSY
-            simulator.scheduler.planning(simulator.time_now + model.get_haircut_duration.next(), model.event_finish)
-            return
-
-class EventFinish:
-    def __init__(event, name):
-        event.name = name
-
-    def run(event, simulator, model):
-        if model.queue > 0:
-            model.queue -= 1
-            simulator.scheduler.planning(simulator.time_now + model.get_haircut_duration.next(), model.event_finish)
-            return
-
-        if model.queue == 0:
-            model.barber.state = Model.Barber.State.FREE
-
+#!/usr/bin/python
 
 class Model:
 
-    class Barber:
-        class State(Enum):
-            FREE = 1
-            BUSY = 2
-        def __init__(barber):
-            barber.state = Model.Barber.State.FREE
+    BARBER_FREE = 0
+    BARBER_BUSY = 1
 
     def __init__(model):
-        model.event_enter = EventEnter('enter')
-        model.event_finish = EventFinish('finish')
-        model.barber = Model.Barber()
-        model.queue = 0
-        model.get_enter_time_delay = Model.__get_enter_time_delay__()
-        model.get_haircut_duration = Model.__get_haircut_duration__()
+        model.barber_state = model.BARBER_FREE
+        model.queue_length = 0
+        model.arrival_interval = Model.arrivalInterval()
+        model.duration_delay = Model.durationDelay()
+
+    def __str__(model):
+        if model.barber_state == model.BARBER_FREE:
+            state = 'free'
+        else:
+            state = 'busy'
+        return state + ', ' + str(model.queue_length)
 
     @staticmethod
-    def __get_enter_time_delay__():
-        enter_time_delay = [14, 13, 17, 15, 16, 15, 14, 22, 19]
-        for delay in enter_time_delay:
-            yield delay
+    def arrivalInterval():
+        for arrival_interval in [14, 13, 17, 15, 16, 15, 14, 22, 19]:
+            yield arrival_interval
 
     @staticmethod
-    def __get_haircut_duration__():
-        get_haircut_duration = [18, 12, 14, 15, 14, 15, 13, 14, 17]
-        for duration in get_haircut_duration:
-            yield duration
+    def durationDelay():
+        for duration_delay in [18, 12, 14, 15, 14, 15, 13, 14, 17]:
+            yield duration_delay
 
+    def arrivalEvent(model, simulator):
+        simulator.planning(model.arrivalEvent, simulator.current_time + model.arrival_interval.next())
+        if model.barber_state == model.BARBER_FREE:
+            model.barber_state = model.BARBER_BUSY
+            simulator.planning(model.serviceFinishedEvent, simulator.current_time + model.duration_delay.next())
+        else:
+            model.queue_length += 1
+
+    def serviceFinishedEvent(model, simulator):
+        if model.queue_length > 0:
+            model.queue_length -= 1
+            simulator.planning(model.serviceFinishedEvent, simulator.current_time + model.duration_delay.next())
+        else:
+            model.barber_state = model.BARBER_FREE
+
+    def barberShopFinishedEvent(model, simulator):
+        if simulator.current_time > 44:
+            exit()
 
 class Simulator:
+
+    def __init__(simulator):
+        simulator.current_time = 0.0
+        simulator.scheduler = Simulator.Scheduler()
 
     class Scheduler:
 
         class Item:
-            def __init__(item, time, event):
-                item.time = time
+            def __init__(item, event, event_time):
                 item.event = event
+                item.event_time = event_time
 
             def __repr__(item):
                 return str(item)
 
             def __str__(item):
-                return str(item.time) + ', ' + item.event.name
+                return item.event.__name__ + '=' + str(item.event_time)
 
         def __init__(scheduler):
-            scheduler.__items__ = []
+            scheduler.events = []
 
-        def planning(scheduler, time, event):
-            scheduler.__items__.append(Simulator.Scheduler.Item(time, event))
+        def planning(scheduler, event, event_time):
+            scheduler.events.append(Simulator.Scheduler.Item(event, event_time))
 
-    def __init__(simulator):
-        simulator.time_now = 0.0
-        simulator.scheduler = Simulator.Scheduler()
+    def planning(simulator, event, event_time):
+        simulator.scheduler.planning(event, event_time)
+
+    def __str__(simulator):
+        return str(simulator.current_time) + ', ' + str(simulator.scheduler.events)
 
     def run(simulator, model):
-        while simulator.scheduler.__items__:
-            simulator.scheduler.__items__.sort(key=lambda item: item.time)
-            item = simulator.scheduler.__items__[0]
-            simulator.scheduler.__items__.remove(item)
-            simulator.time_now = item.time
-            item.event.run(simulator, model)
-            print 'time = %f, queue = %d, barber = %s, future_events_list = %s' % (simulator.time_now, model.queue, model.barber.state, simulator.scheduler.__items__)
+        while simulator.scheduler.events:
+            item = min(simulator.scheduler.events, key=lambda item: item.event_time)
+            simulator.scheduler.events.remove(item)
 
+            simulator.current_time = item.event_time
 
-model = Model()
+            item.event(simulator)
+            print simulator, model
+
 simulator = Simulator()
-simulator.scheduler.planning(model.get_enter_time_delay.next(), model.event_enter)
+model = Model()
+print simulator, model
+simulator.planning(model.arrivalEvent, model.arrival_interval.next())
+simulator.planning(model.barberShopFinishedEvent, 45)
+
+print simulator, model
 simulator.run(model)
